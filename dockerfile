@@ -1,23 +1,37 @@
-# Базовый образ Python
-FROM python:3.12
+# Этап сборки с компиляцией (регистр исправлен)
+FROM python:3.12-slim AS builder
 
-# Установка рабочей директории
 WORKDIR /app
 
-# Копируем зависимости
+# Установка системных зависимостей для сборки
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    libsqlite3-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Копируем и устанавливаем зависимости
 COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
-# Устанавливаем зависимости
-RUN pip install --no-cache-dir -r requirements.txt
+# Финальный образ
+FROM python:3.12-slim
+WORKDIR /app
 
-# Копируем все файлы проекта
+# Копируем только необходимое из builder
+COPY --from=builder /root/.local /root/.local
+COPY --from=builder /app/requirements.txt .
+
+# Копируем остальные файлы проекта
 COPY . .
 
-# Создаем папки для базы данных и статики
-RUN mkdir -p instance static
+# Настраиваем окружение
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
 
-# Открываем порт Flask
+# Очищаем кэш pip
+RUN rm -rf /root/.cache/pip
+
 EXPOSE 5000
-
-# Команда запуска (debug=False для production)
 CMD ["python", "app.py"]
